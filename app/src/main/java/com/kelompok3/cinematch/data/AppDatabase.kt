@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-// UBAH version dari 1 ke 2 karena skema FavoriteMovie sudah berubah (tambah imageUrl, trailerUrl, dll)
+// Versi 2 dengan skema baru
 @Database(entities = [FavoriteMovie::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
@@ -20,11 +20,15 @@ abstract class AppDatabase : RoomDatabase() {
                 val newInstance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "cinematch_db"
+                    "cinematch_db" // Nama database yang harus dicari di App Inspection
                 )
-                    // Baris ini akan menghapus database lama yang strukturnya berbeda (versi 1)
-                    // dan membuat ulang yang baru (versi 2) secara otomatis tanpa crash.
+                    // Menghapus data lama jika ada perubahan versi agar tidak crash
                     .fallbackToDestructiveMigration()
+
+                    // TAMBAHKAN INI: Membolehkan akses di main thread sementara agar
+                    // database cepat terdeteksi saat inisialisasi di MainActivity.
+                    .allowMainThreadQueries()
+
                     .build()
                 instance = newInstance
                 newInstance

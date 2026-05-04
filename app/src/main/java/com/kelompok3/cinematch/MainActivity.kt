@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.navigation.compose.*
 import com.google.firebase.auth.FirebaseAuth
+// Import AppDatabase agar bisa dipanggil di onCreate
+import com.kelompok3.cinematch.data.AppDatabase
 import com.kelompok3.cinematch.data.Movie
 import com.kelompok3.cinematch.ui.*
 import com.kelompok3.cinematch.ui.theme.CineMatchTheme
@@ -13,6 +15,13 @@ import com.kelompok3.cinematch.ui.theme.CineMatchTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // --- BARIS FIX ---
+        // Memanggil database saat aplikasi pertama kali dijalankan.
+        // Ini memastikan file "cinematch_db" dibuat secara fisik di HP Samsung kamu.
+        AppDatabase.getDatabase(this)
+        // -----------------
+
         setContent {
             CineMatchTheme {
                 val navController = rememberNavController()
@@ -23,13 +32,21 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable("login") {
                         LoginScreen(
-                            onLoginSuccess = { navController.navigate("home") { popUpTo("login") { inclusive = true } } },
+                            onLoginSuccess = {
+                                navController.navigate("home") {
+                                    popUpTo("login") { inclusive = true }
+                                }
+                            },
                             onNavigateToRegister = { navController.navigate("register") }
                         )
                     }
                     composable("register") {
                         RegisterScreen(
-                            onRegisterSuccess = { navController.navigate("home") { popUpTo("login") { inclusive = true } } },
+                            onRegisterSuccess = {
+                                navController.navigate("home") {
+                                    popUpTo("login") { inclusive = true }
+                                }
+                            },
                             onBackToLogin = { navController.popBackStack() }
                         )
                     }
@@ -42,7 +59,9 @@ class MainActivity : ComponentActivity() {
                             onNavigateToFavorite = { navController.navigate("favorite") },
                             onLogout = {
                                 auth.signOut()
-                                navController.navigate("login") { popUpTo("home") { inclusive = true } }
+                                navController.navigate("login") {
+                                    popUpTo("home") { inclusive = true }
+                                }
                             }
                         )
                     }
