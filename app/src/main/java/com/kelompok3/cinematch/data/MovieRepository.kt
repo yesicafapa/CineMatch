@@ -5,55 +5,65 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 
 class MovieRepository(
-    private val movieDao: MovieDAO,       // Untuk akses Room (Lokal)
+    private val movieDao: MovieDAO,           // Untuk akses Room (Lokal)
     private val firestore: FirebaseFirestore // Untuk akses Firebase (Cloud)
 ) {
 
     // --- LOGIKA ROOM (OFFLINE & FAVORIT) ---
 
-    /**
-     * Mengambil daftar film favorit dari database lokal Room.
-     * Menggunakan Flow agar UI otomatis terupdate secara real-time.
-     */
     fun getFavoritesByUser(userId: String): Flow<List<FavoriteMovie>> {
         return movieDao.getFavoritesByUser(userId)
     }
 
-    /**
-     * Menambahkan film ke dalam database lokal Room.
-     */
     suspend fun addMovieToFavorite(movie: FavoriteMovie) {
         movieDao.insertFavorite(movie)
     }
 
-    /**
-     * Menghapus film dari daftar favorit di database lokal Room.
-     */
     suspend fun removeMovieFromFavorite(movie: FavoriteMovie) {
         movieDao.deleteFavorite(movie)
     }
 
-    /**
-     * Mengecek status favorit film.
-     * Mengonversi hasil Int dari DAO (0 atau 1) menjadi Boolean (True atau False).
-     */
     suspend fun isFavorite(movieId: String, userId: String): Boolean {
-        // Fix: Tambahkan pengecekan > 0 untuk mencocokkan tipe data Boolean
         return movieDao.isFavorite(movieId, userId) > 0
     }
 
-    // --- LOGIKA FIREBASE (ONLINE) ---
+    // --- LOGIKA FIREBASE (ONLINE - MOVIES) ---
 
-    /**
-     * Mengambil data film dari koleksi "movies" di Firestore.
-     */
     suspend fun getMoviesFromFirestore(): List<FavoriteMovie> {
         return try {
             val snapshot = firestore.collection("movies").get().await()
             snapshot.toObjects(FavoriteMovie::class.java)
         } catch (e: Exception) {
-            // Jika offline atau error, kembalikan list kosong
             emptyList()
+        }
+    }
+
+    // --- LOGIKA USER PROFILE (BARU - ONLINE & MULTI USER) ---
+
+    /**
+     * Mengambil data profil user berdasarkan UID dari Firestore.
+     */
+    suspend fun getUserProfile(userId: String): UserProfile? {
+        return try {
+            val document = firestore.collection("users").document(userId).get().await()
+            document.toObject(UserProfile::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Menyimpan atau memperbarui data profil user di Firestore.
+     * Memenuhi kriteria Online & Multi-user (Poin 1 & 3 UAS).
+     */
+    suspend fun updateUserProfile(userId: String, name: String, email: String) {
+        try {
+            val userProfile = UserProfile(uid = userId, name = name, email = email)
+            firestore.collection("users").document(userId)
+                .set(userProfile, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+        } catch (e: Exception) {
+            throw e
         }
     }
 }
