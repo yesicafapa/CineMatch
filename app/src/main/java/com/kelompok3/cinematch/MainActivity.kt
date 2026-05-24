@@ -19,7 +19,16 @@ import com.kelompok3.cinematch.ui.DetailScreen
 import com.kelompok3.cinematch.ui.FavoriteScreen
 import com.kelompok3.cinematch.ui.ProfileScreen
 import com.kelompok3.cinematch.ui.EditProfileScreen
+import com.kelompok3.cinematch.ui.NotificationScreen
 import com.kelompok3.cinematch.ui.theme.CineMatchTheme
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.firebase.firestore.FirebaseFirestore
+import com.kelompok3.cinematch.ui.NotificationHelper
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,6 +36,25 @@ class MainActivity : ComponentActivity() {
 
         // Memastikan database lokal Room siap
         AppDatabase.getDatabase(this)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
+            if (
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ),
+                    100
+                )
+            }
+        }
 
         setContent {
             CineMatchTheme {
@@ -40,6 +68,43 @@ class MainActivity : ComponentActivity() {
                 var selectedMovie by remember { mutableStateOf<Movie?>(null) }
 
                 NavHost(navController = navController, startDestination = startDest) {
+
+                    // --- NOTIFIKASI ---
+                    composable("notification") {
+
+                        NotificationScreen(
+
+                            onBack = {
+                                navController.popBackStack()
+                            },
+
+                            onOpenMovie = { movieId ->
+
+                                FirebaseFirestore
+                                    .getInstance()
+                                    .collection("movies")
+                                    .document(movieId)
+                                    .get()
+                                    .addOnSuccessListener { doc ->
+
+                                        if (doc.exists()) {
+
+                                            selectedMovie = Movie(
+                                                id = doc.id,
+                                                title = doc.getString("title") ?: "",
+                                                category = doc.getString("category") ?: "",
+                                                description = doc.getString("description") ?: "",
+                                                rating = doc.getDouble("rating") ?: 0.0,
+                                                imageUrl = doc.getString("imageUrl") ?: "",
+                                                trailerUrl = doc.getString("trailerUrl") ?: ""
+                                            )
+
+                                            navController.navigate("detail")
+                                        }
+                                    }
+                            }
+                        )
+                    }
 
                     // --- LOGIN ---
                     composable("login") {
@@ -72,12 +137,22 @@ class MainActivity : ComponentActivity() {
                                 selectedMovie = movie
                                 navController.navigate("detail")
                             },
-                            onNavigateToFavorite = { navController.navigate("favorite") },
-                            onNavigateToProfile = { navController.navigate("profile") },
+                            onNavigateToFavorite = {
+                                navController.navigate("favorite")
+                            },
+                            onNavigateToProfile = {
+                                navController.navigate("profile")
+                            },
+                            onNavigateToNotification = {
+                                navController.navigate("notification")
+                            },
                             onLogout = {
                                 auth.signOut()
+
                                 navController.navigate("login") {
-                                    popUpTo("home") { inclusive = true }
+                                    popUpTo("home") {
+                                        inclusive = true
+                                    }
                                 }
                             }
                         )

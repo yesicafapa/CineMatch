@@ -5,8 +5,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 
 class MovieRepository(
-    private val movieDao: MovieDAO,           // Untuk akses Room (Lokal)
-    private val firestore: FirebaseFirestore // Untuk akses Firebase (Cloud)
+    private val movieDao: MovieDAO,
+    private val firestore: FirebaseFirestore
 ) {
 
     // --- LOGIKA ROOM (OFFLINE & FAVORIT) ---
@@ -65,5 +65,36 @@ class MovieRepository(
         } catch (e: Exception) {
             throw e
         }
+    }
+    private val db = FirebaseFirestore.getInstance()
+
+    fun getNotifications(
+        onResult: (List<NotificationItem>) -> Unit
+    ) {
+
+        db.collection("notifications")
+            .orderBy("timestamp")
+            .addSnapshotListener { snapshot, _ ->
+
+                if (snapshot != null) {
+
+                    val notifications = snapshot.documents.map { doc ->
+
+                        NotificationItem(
+                            id = doc.id,
+                            title = doc.getString("title") ?: "",
+                            message = doc.getString("message") ?: "",
+                            movieId = doc.getString("movieId") ?: "",
+                            movieTitle = doc.getString("movieTitle") ?: "",
+                            imageUrl = doc.getString("imageUrl") ?: "",
+                            category = doc.getString("category") ?: "",
+                            type = doc.getString("type") ?: "",
+                            isRead = doc.getBoolean("isRead") ?: false
+                        )
+                    }
+
+                    onResult(notifications.reversed())
+                }
+            }
     }
 }

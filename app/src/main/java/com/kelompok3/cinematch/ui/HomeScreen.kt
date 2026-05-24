@@ -26,6 +26,11 @@ import com.kelompok3.cinematch.data.MovieService
 import com.kelompok3.cinematch.ui.theme.CineBlack
 import com.kelompok3.cinematch.ui.theme.CinePink
 import androidx.compose.material.icons.filled.Notifications
+import android.util.Log
+import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.firestore.FirebaseFirestore
+import androidx.compose.foundation.shape.CircleShape
+import com.google.firebase.firestore.Query
 
 // Daftar kategori disamakan persis dengan yang ada di panel Admin
 val MOVIE_CATEGORIES = listOf(
@@ -43,10 +48,14 @@ fun HomeScreen(
     onNavigateToNotification: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
     val movieService = remember { MovieService() }
     var allMovies by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var displayedMovies by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var hasUnreadNotification by remember {
+        mutableStateOf(false)
+    }
 
     // Gabungkan "Semua" dengan list kategori admin
     val categories = remember { listOf("Semua") + MOVIE_CATEGORIES }
@@ -57,6 +66,68 @@ fun HomeScreen(
         allMovies = movieService.getAllMovies()
         displayedMovies = allMovies
         isLoading = false
+    }
+
+    var lastNotifId by remember {
+        mutableStateOf("")
+    }
+
+    DisposableEffect(Unit) {
+
+        val registration =
+            FirebaseFirestore.getInstance()
+                .collection("notifications")
+                .orderBy(
+                    "timestamp",
+                    Query.Direction.ASCENDING
+                )
+                .addSnapshotListener { snapshot, error ->
+
+                    if (error != null) {
+                        Log.e("NOTIF", error.message ?: "")
+                        return@addSnapshotListener
+                    }
+
+                    if (snapshot != null) {
+                        hasUnreadNotification =
+                            snapshot.documents.any {
+                                it.getBoolean("isRead") == false
+                            }
+
+                        val newest =
+                            snapshot.documents.lastOrNull()
+
+                        val newestId =
+                            newest?.id ?: ""
+
+                        if (
+                            lastNotifId.isNotEmpty() &&
+                            newestId != lastNotifId
+                        ) {
+
+                            Log.d(
+                                "NOTIF_TEST",
+                                "SHOW NOTIFICATION -> $newestId"
+                            )
+                            Log.d(
+                                "NOTIF_TEST",
+                                "MENAMPILKAN STATUS BAR"
+                            )
+
+                            NotificationHelper(context)
+                                .showNotification(
+                                    newest?.getString("title") ?: "",
+                                    newest?.getString("message") ?: ""
+                                )
+                        }
+
+                        lastNotifId = newestId
+                    }
+                }
+
+        onDispose {
+            registration.remove()
+        }
     }
 
     // Filter logika pencarian kategori (menggunakan equals/exact match agar lebih akurat)
@@ -73,16 +144,33 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("CineMatch", color = CinePink, fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            onNavigateToNotification()
+                    Box {
+
+                        IconButton(
+                            onClick = {
+                                onNavigateToNotification()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notification",
+                                tint = Color.White
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notification",
-                            tint = Color.White
-                        )
+
+                        if (hasUnreadNotification) {
+
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        Color.Red,
+                                        shape = CircleShape
+                                    )
+                                    .align(Alignment.TopEnd)
+                            ) { }
+
+                        }
                     }
                     IconButton(onClick = onNavigateToFavorite) {
                         Icon(Icons.Default.Favorite, contentDescription = "Favorit", tint = CinePink)
