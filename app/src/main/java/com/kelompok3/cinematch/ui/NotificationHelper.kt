@@ -10,7 +10,10 @@ class NotificationHelper(private val context: Context) {
 
     private val channelId = "movie_channel"
 
-    fun showNotification(title: String, message: String) {
+    fun showNotification(
+        title: String,
+        message: String
+    ) {
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE)
@@ -21,18 +24,24 @@ class NotificationHelper(private val context: Context) {
             val channel = NotificationChannel(
                 channelId,
                 "Movie Notifications",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             )
 
             manager.createNotificationChannel(channel)
         }
 
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .build()
+        val notification =
+            NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
 
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        manager.notify(
+            System.currentTimeMillis().toInt(),
+            notification
+        )
     }
 }

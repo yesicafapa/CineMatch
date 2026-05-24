@@ -9,10 +9,19 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.kelompok3.cinematch.data.NotificationItem
 
 class MovieViewModel(private val repository: MovieRepository) : ViewModel() {
 
     private val auth = FirebaseAuth.getInstance()
+    var notifications by mutableStateOf<List<NotificationItem>>(emptyList())
+        private set
+
+    private var lastNotificationCount = 0
 
     // State untuk mengecek apakah film sudah favorit atau belum
     private val _isFavorite = MutableStateFlow(false)
@@ -50,6 +59,29 @@ class MovieViewModel(private val repository: MovieRepository) : ViewModel() {
             }
         } else {
             _isFavorite.value = false
+        }
+    }
+    fun loadNotifications(context: Context) {
+
+        repository.getNotifications { notificationList ->
+
+            // Jangan tampilkan popup saat pertama kali data dimuat
+            if (
+                notificationList.size > lastNotificationCount &&
+                lastNotificationCount != 0
+            ) {
+
+                val latest = notificationList.first()
+
+                NotificationHelper(context).showNotification(
+                    latest.title,
+                    latest.message
+                )
+            }
+
+            lastNotificationCount = notificationList.size
+
+            notifications = notificationList
         }
     }
 }

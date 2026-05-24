@@ -6,9 +6,9 @@ import androidx.room.PrimaryKey
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
-@Entity(tableName = "movies") // Tambahkan ini untuk poin Persistence Room
+@Entity(tableName = "movies")
 data class Movie(
-    @PrimaryKey val id: String = "", // ID dari Firestore atau API menjadi Primary Key di Room
+    @PrimaryKey val id: String = "",
     val title: String = "",
     val category: String = "",
     val description: String = "",
@@ -17,10 +17,21 @@ data class Movie(
     val trailerUrl: String = ""
 ) : Parcelable
 
-// Tambahkan Data Class khusus User untuk Edit Profile (Poin Multi-user & Online)
 data class UserProfile(
     val uid: String = "",
     val name: String = "",
     val email: String = "",
-    val photoUrl: String = "" // Tambahkan ini agar sinkron dengan EditProfile
+    val photoUrl: String = ""
+)
+
+data class NotificationItem(
+    val id: String = "",
+    val title: String = "",
+    val message: String = "",
+    val movieId: String = "",
+    val movieTitle: String = "",
+    val imageUrl: String = "",
+    val category: String = "",
+    val type: String = "",
+    val isRead: Boolean = false
 )
