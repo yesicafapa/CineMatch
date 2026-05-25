@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.firestore.FirebaseFirestore
 import androidx.compose.foundation.shape.CircleShape
 import com.google.firebase.firestore.Query
+import androidx.compose.material.icons.filled.Search
 
 // Daftar kategori disamakan persis dengan yang ada di panel Admin
 val MOVIE_CATEGORIES = listOf(
@@ -53,8 +54,11 @@ fun HomeScreen(
     var allMovies by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var displayedMovies by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    var hasUnreadNotification by remember {
-        mutableStateOf(false)
+    var unreadCount by remember {
+        mutableIntStateOf(0)
+    }
+    var searchQuery by remember {
+        mutableStateOf("")
     }
 
     // Gabungkan "Semua" dengan list kategori admin
@@ -89,9 +93,9 @@ fun HomeScreen(
                     }
 
                     if (snapshot != null) {
-                        hasUnreadNotification =
-                            snapshot.documents.any {
-                                it.getBoolean("isRead") == false
+                        unreadCount =
+                            snapshot.documents.count {
+                                !(it.getBoolean("isRead") ?: false)
                             }
 
                         val newest =
@@ -131,12 +135,25 @@ fun HomeScreen(
     }
 
     // Filter logika pencarian kategori (menggunakan equals/exact match agar lebih akurat)
-    LaunchedEffect(selectedCategory, allMovies) {
-        displayedMovies = if (selectedCategory == "Semua") {
-            allMovies
-        } else {
-            allMovies.filter { it.category.equals(selectedCategory, ignoreCase = true) }
-        }
+    LaunchedEffect(selectedCategory, allMovies, searchQuery) {
+        displayedMovies =
+            allMovies.filter { movie ->
+
+                val cocokKategori =
+                    selectedCategory == "Semua" ||
+                            movie.category.equals(
+                                selectedCategory,
+                                ignoreCase = true
+                            )
+
+                val cocokSearch =
+                    movie.title.contains(
+                        searchQuery,
+                        ignoreCase = true
+                    )
+
+                cocokKategori && cocokSearch
+            }
     }
 
     Scaffold(
@@ -158,18 +175,19 @@ fun HomeScreen(
                             )
                         }
 
-                        if (hasUnreadNotification) {
+                        if (unreadCount > 0) {
 
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(
-                                        Color.Red,
-                                        shape = CircleShape
-                                    )
-                                    .align(Alignment.TopEnd)
-                            ) { }
-
+                            Badge(
+                                modifier = Modifier.align(Alignment.TopEnd)
+                            ) {
+                                Text(
+                                    text =
+                                        if (unreadCount > 99)
+                                            "99+"
+                                        else
+                                            unreadCount.toString()
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = onNavigateToFavorite) {
@@ -207,6 +225,48 @@ fun HomeScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().background(CineBlack).padding(padding)) {
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                },
+
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color.Gray
+                    )
+                },
+
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+
+                label = {
+                    Text("Cari Film")
+                },
+
+                singleLine = true,
+
+                textStyle = LocalTextStyle.current.copy(
+                    color = Color.White
+                ),
+
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+
+                    focusedBorderColor = CinePink,
+                    unfocusedBorderColor = Color.Gray,
+
+                    focusedLabelColor = CinePink,
+                    unfocusedLabelColor = Color.Gray,
+
+                    cursorColor = CinePink
+                )
+            )
 
             // Menampilkan seluruh kategori dengan indikator garis bawah (indicator) bawaan material3
             ScrollableTabRow(
