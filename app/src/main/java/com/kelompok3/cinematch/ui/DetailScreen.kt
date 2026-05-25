@@ -41,12 +41,16 @@ import java.util.*
 fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Inisialisasi Database Lokal (Room) dan Firebase Auth
     val dbRoom = remember { AppDatabase.getDatabase(context) }
     val auth = remember { FirebaseAuth.getInstance() }
     val currentUser = auth.currentUser
 
+    // State Reactive: Menandai apakah film ini sudah ada di daftar favorit lokal user atau belum
     var isFavorite by remember { mutableStateOf(false) }
 
+    // VALIDASI STATUS FAVORIT: Cek ke SQLite lokal apakah film ini sudah di-bookmark oleh user saat ini
     LaunchedEffect(currentUser) {
         if (currentUser != null && movie.id.isNotEmpty()) {
             isFavorite = dbRoom.movieDao().isFavorite(movie.id, currentUser.uid) > 0
@@ -65,22 +69,27 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = CineBlack)
             )
         },
+        // FLOATING ACTION BUTTON (LOGIKA BOOKMARK SQLITE)
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
                     if (currentUser != null) {
+                        // Jalankan Coroutine Scope karena operasi Database Room wajib berjalan di background thread (Asynchronous)
                         scope.launch {
                             val fav = FavoriteMovie(
                                 movie.id, currentUser.uid, movie.title,
                                 movie.category, movie.description, movie.rating,
                                 movie.imageUrl, movie.trailerUrl
                             )
+                            // Jika sudah favorit maka hapus dari local DB, jika belum maka masukkan ke local DB
                             if (isFavorite) dbRoom.movieDao().deleteFavorite(fav)
                             else dbRoom.movieDao().insertFavorite(fav)
+
+                            // Balikkan status state untuk memperbarui visual warna ikon jantung secara real-time
                             isFavorite = !isFavorite
                         }
                     } else {
-                        onNavigateToLogin()
+                        onNavigateToLogin() // Tendang ke halaman login jika user anonim mencoba mem-favoritkan
                     }
                 },
                 containerColor = if (isFavorite) CinePink else Color.White
@@ -108,7 +117,6 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
             )
 
             Column(modifier = Modifier.padding(20.dp)) {
-                // JUDUL FILM
                 Text(
                     text = movie.title,
                     fontSize = 26.sp,
@@ -116,7 +124,6 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                     color = Color.White
                 )
 
-                // --- BARIS RATING ADMIN & KATEGORI (FIX DISINI) ---
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 8.dp)
@@ -124,7 +131,7 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = "Rating Admin",
-                        tint = Color(0xFFFFD700), // Warna Emas
+                        tint = Color(0xFFFFD700),
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -135,11 +142,7 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "•",
-                        color = Color.Gray,
-                        fontSize = 16.sp
-                    )
+                    Text(text = "•", color = Color.Gray, fontSize = 16.sp)
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = movie.category,
@@ -148,10 +151,10 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                         fontWeight = FontWeight.Medium
                     )
                 }
-                // --------------------------------------------------
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // TOMBOL TONTON TRAILER (LOGIKA INTENT & HISTORI FIRESTORE)
                 Button(
                     onClick = {
                         if (movie.trailerUrl.isNotEmpty()) {
@@ -166,11 +169,13 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                                     "timestamp" to com.google.firebase.Timestamp.now()
                                 )
 
+                                // Catat aktivitas tontonan ke sub-collection 'history' di bawah dokumen user terkait
                                 dbFirestore.collection("users")
                                     .document(currentUser.uid)
                                     .collection("history")
                                     .add(historyData)
                             }
+                            // LOGIKA INTENT IMPLISIT: Membuka aplikasi eksternal (seperti YouTube atau Browser) untuk memutar URL trailer
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(movie.trailerUrl))
                             context.startActivity(intent)
                         }
@@ -192,7 +197,7 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
                 HorizontalDivider(color = Color.DarkGray, thickness = 0.5.dp)
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // KOMPONEN KOMENTAR
+                // Memanggil Komponen Area Komentar
                 CommentSection(movieId = movie.id)
 
                 Spacer(modifier = Modifier.height(50.dp))
@@ -201,12 +206,14 @@ fun DetailScreen(movie: Movie, onBack: () -> Unit, onNavigateToLogin: () -> Unit
     }
 }
 
+// REUSABLE AREA COMPONENT: Mengelola input ulasan, rating bintang, dan sinkronisasi list komentar film
 @Composable
 fun CommentSection(movieId: String) {
     val db = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
 
+    // State Input Kendali Form Ulasan
     var commentText by remember { mutableStateOf("") }
     var ratingSelected by remember { mutableIntStateOf(0) }
     var comments by remember { mutableStateOf<List<Pair<String, Map<String, Any>>>>(emptyList()) }
@@ -215,7 +222,7 @@ fun CommentSection(movieId: String) {
     var myName by remember { mutableStateOf("User") }
     var myPhoto by remember { mutableStateOf("") }
 
-    // Mengambil profil terbaru user login untuk di box input
+    // REAL-TIME LISTENER PROFILE DATA: Mengambil info profil user yang sedang login untuk dicantumkan di kotak input
     LaunchedEffect(currentUser) {
         currentUser?.uid?.let { uid ->
             db.collection("users").document(uid).addSnapshotListener { doc, _ ->
@@ -227,7 +234,7 @@ fun CommentSection(movieId: String) {
         }
     }
 
-    // Mengambil list komentar
+    // REAL-TIME LISTENER COMMENTS: Menarik daftar ulasan film ini dari Firestore secara real-time berdasarkan waktu terbaru
     LaunchedEffect(movieId) {
         db.collection("movies").document(movieId).collection("comments")
             .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -242,7 +249,6 @@ fun CommentSection(movieId: String) {
         Text("Ulasan Pengguna (${comments.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // INPUT BOX
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
             shape = RoundedCornerShape(12.dp)
@@ -253,6 +259,7 @@ fun CommentSection(movieId: String) {
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(myName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        // RATING SELECTION (LOOP 5 BINTANG INTERAKTIF)
                         Row {
                             for (i in 1..5) {
                                 Icon(
@@ -285,6 +292,7 @@ fun CommentSection(movieId: String) {
                         TextButton(onClick = { commentText = ""; ratingSelected = 0; editingCommentId = null }) {
                             Text("Batal", color = Color.Gray)
                         }
+                        // LOGIKA TOMBOL SUBMIT (KIRIM ATAU UPDATE DATA)
                         Button(
                             onClick = {
                                 val colRef = db.collection("movies").document(movieId).collection("comments")
@@ -295,6 +303,7 @@ fun CommentSection(movieId: String) {
                                     "timestamp" to com.google.firebase.Timestamp.now()
                                 )
 
+                                // UPSERT LOGIKA: Jika sedang mengedit, tembak fungsi update(). Jika baru, tembak fungsi add().
                                 if (editingCommentId != null) {
                                     colRef.document(editingCommentId!!).update(data as Map<String, Any>)
                                     editingCommentId = null
@@ -304,7 +313,7 @@ fun CommentSection(movieId: String) {
                                 commentText = ""; ratingSelected = 0
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = CinePink),
-                            enabled = ratingSelected > 0,
+                            enabled = ratingSelected > 0, // Validasi: Wajib isi bintang minimal 1 baru tombol menyala
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(if (editingCommentId != null) "Simpan" else "Kirim")
@@ -316,14 +325,14 @@ fun CommentSection(movieId: String) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // DAFTAR KOMENTAR
+        // ITERASI RENDERING LIST: Melakukan perulangan komponen ulasan berdasarkan list data dari database
         comments.forEach { (id, data) ->
             val userIdFromComment = data["userId"].toString()
             CommentItem(
                 db = db,
                 userId = userIdFromComment,
                 commentData = data,
-                isOwner = currentUser?.uid == userIdFromComment,
+                isOwner = currentUser?.uid == userIdFromComment, // Cek kepemilikan ulasan untuk memunculkan tombol opsi edit/hapus
                 onEdit = {
                     editingCommentId = id
                     commentText = data["commentText"].toString()
@@ -337,6 +346,7 @@ fun CommentSection(movieId: String) {
     }
 }
 
+// REUSABLE ITEM COMPONENT: Merender layout baris per baris ulasan dari pengguna lain beserta kontrol menunya
 @Composable
 fun CommentItem(
     db: FirebaseFirestore,
@@ -350,7 +360,8 @@ fun CommentItem(
     var userPhoto by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
 
-    // Inilah kuncinya: Fetch profil terbaru dari koleksi USERS berdasarkan userId di komentar
+    // CROSS-COLLECTION QUERY: Mengambil info nama asli & foto pengguna langsung dari root collection 'users'
+    // berdasarkan userId yang tertera di dalam dokumen komentar terkait (mencegah nama anonim)
     LaunchedEffect(userId) {
         db.collection("users").document(userId).addSnapshotListener { doc, _ ->
             if (doc != null && doc.exists()) {
@@ -380,6 +391,7 @@ fun CommentItem(
             Text(commentData["commentText"].toString(), color = Color.LightGray, fontSize = 14.sp, lineHeight = 20.sp)
         }
 
+        // AKSI MENU EDIT/HAPUS: Hanya akan dirender dan muncul jika ulasan tersebut adalah milik user yang sedang login saat ini
         if (isOwner) {
             Box {
                 IconButton(onClick = { showMenu = true }) {
@@ -404,6 +416,7 @@ fun CommentItem(
     }
 }
 
+// UTILITY COMPONENT: Dekoder gambar string Base64 dari Firestore kembali menjadi bentuk bitmap/gambar avatar lingkaran
 @Composable
 fun UserAvatar(base64String: String, size: androidx.compose.ui.unit.Dp) {
     AsyncImage(

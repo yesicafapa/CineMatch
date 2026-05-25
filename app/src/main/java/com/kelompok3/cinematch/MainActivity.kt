@@ -28,7 +28,8 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
-import com.kelompok3.cinematch.ui.NotificationHelper
+import android.util.Log
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,24 +38,33 @@ class MainActivity : ComponentActivity() {
         // Memastikan database lokal Room siap
         AppDatabase.getDatabase(this)
 
+        // Minta izin memunculkan notifikasi untuk Android 13 ke atas
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-
             if (
                 ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-
                 ActivityCompat.requestPermissions(
                     this,
-                    arrayOf(
-                        Manifest.permission.POST_NOTIFICATIONS
-                    ),
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                     100
                 )
             }
         }
+
+        // Ambil fcmToken agar HP terdaftar di Firebase Console
+        FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                if (uid != null) {
+                    FirebaseFirestore.getInstance()
+                        .collection("users")
+                        .document(uid)
+                        .update("fcmToken", token)
+                }
+            }
 
         setContent {
             CineMatchTheme {
@@ -64,31 +74,22 @@ class MainActivity : ComponentActivity() {
                 // Menentukan halaman pertama berdasarkan status login
                 val startDest = if (auth.currentUser != null) "home" else "login"
 
-                // State untuk menampung movie yang dipilih saat navigasi ke Detail
+                // State menampung movie terpilih saat masuk ke halaman detail
                 var selectedMovie by remember { mutableStateOf<Movie?>(null) }
 
                 NavHost(navController = navController, startDestination = startDest) {
 
                     // --- NOTIFIKASI ---
                     composable("notification") {
-
                         NotificationScreen(
-
-                            onBack = {
-                                navController.popBackStack()
-                            },
-
+                            onBack = { navController.popBackStack() },
                             onOpenMovie = { movieId ->
-
-                                FirebaseFirestore
-                                    .getInstance()
+                                FirebaseFirestore.getInstance()
                                     .collection("movies")
                                     .document(movieId)
                                     .get()
                                     .addOnSuccessListener { doc ->
-
                                         if (doc.exists()) {
-
                                             selectedMovie = Movie(
                                                 id = doc.id,
                                                 title = doc.getString("title") ?: "",
@@ -98,7 +99,6 @@ class MainActivity : ComponentActivity() {
                                                 imageUrl = doc.getString("imageUrl") ?: "",
                                                 trailerUrl = doc.getString("trailerUrl") ?: ""
                                             )
-
                                             navController.navigate("detail")
                                         }
                                     }
@@ -137,22 +137,13 @@ class MainActivity : ComponentActivity() {
                                 selectedMovie = movie
                                 navController.navigate("detail")
                             },
-                            onNavigateToFavorite = {
-                                navController.navigate("favorite")
-                            },
-                            onNavigateToProfile = {
-                                navController.navigate("profile")
-                            },
-                            onNavigateToNotification = {
-                                navController.navigate("notification")
-                            },
+                            onNavigateToFavorite = { navController.navigate("favorite") },
+                            onNavigateToProfile = { navController.navigate("profile") },
+                            onNavigateToNotification = { navController.navigate("notification") },
                             onLogout = {
                                 auth.signOut()
-
                                 navController.navigate("login") {
-                                    popUpTo("home") {
-                                        inclusive = true
-                                    }
+                                    popUpTo("home") { inclusive = true }
                                 }
                             }
                         )
@@ -172,7 +163,6 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         } else {
-                            // Jika movie null, balik ke home
                             LaunchedEffect(Unit) { navController.navigate("home") }
                         }
                     }
@@ -204,12 +194,11 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // --- EDIT PROFILE (KOREKSI DI SINI) ---
+                    // --- EDIT PROFILE ---
                     composable("edit_profile") {
                         EditProfileScreen(
                             onBack = { navController.popBackStack() },
                             onLogoutToLogin = {
-                                // Arahkan ke login dan bersihkan semua history navigasi
                                 navController.navigate("login") {
                                     popUpTo("home") { inclusive = true }
                                 }
